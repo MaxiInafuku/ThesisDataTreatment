@@ -3,7 +3,84 @@ from scipy import integrate
 from scipy import interpolate
 from constants import * 
 from scipy.optimize import least_squares
-import inspect
+from scipy.signal import convolve
+
+#------------------------------------------#
+#----------------UTILS---------------------#
+#------------------------------------------#
+#given two sets of data, each one with its own x axis and y axis, this function interpolates to a third axis and returns a numpy array of complex numbers
+def convertToInterpolatedComplex(xReal,yReal, xImag,yImag, xInterpolated):
+    interpolatedComplex = np.empty(xInterpolated.shape, dtype=complex)
+    
+    realInterpolator = interpolate.interp1d(xReal,yReal,kind='cubic', fill_value='extrapolate')
+    interpolatedComplex.real = realInterpolator(xInterpolated)
+    
+    imagInterpolator = interpolate.interp1d(xImag,yImag,kind='cubic', fill_value='extrapolate')
+    interpolatedComplex.imag = imagInterpolator(xInterpolated)
+
+    return interpolatedComplex
+
+#Interpolates a data set to xInterpol
+#Interpolate doesn't work if the x axis is not ordered, if there are repeated values or if there are any nans.
+def funcInterpolate(xOriginal, yOriginal, xInterpol):
+    if xOriginal[0]>=xOriginal[1]:
+        xOriginal = xOriginal[::-1]
+        yOriginal = yOriginal[::-1]
+    
+    mask = ~np.isnan(yOriginal)
+    yOriginal = yOriginal[mask]
+    interpolator = interpolate.interp1d(xOriginal, yOriginal, kind='cubic', fill_value='extrapolate')
+    yInterpolated = interpolator(xInterpol)
+    return (yInterpolated)
+
+
+#Input: complex np.array
+#Ouput: complex np.array
+def refractionIndexToDielectricFunc(n):
+    #If n is a np array do nothing, otherwise make it a np.array so multiplication is element wise.
+    n = np.asarray(n)
+    diel = np.empty(n.real.shape, dtype=complex)
+    diel.real = n.real**2 - n.imag**2
+    diel.imag = 2*n.real*n.imag
+
+    return diel
+
+def funcGaussian(x,sigma):
+    return np.exp(-x**2/(2*sigma**2))
+
+def convolutionGaussian(signal, sigma,halfPixels):
+    xAxis = np.linspace(-halfPixels, halfPixels, 2*halfPixels+1)
+    gaussianKernel = funcGaussian(xAxis, sigma)
+    convolution = convolve(signal, gaussianKernel, mode = 'same')
+
+    return convolution, gaussianKernel
+
+def logNormalDistribution(x,mean,std):
+    mu = np.log(mean**2 / np.sqrt(mean**2 + std**2))
+    sigma = np.sqrt(np.log(1 + (std**2/mean**2)))
+    return 1/(x*sigma*np.sqrt(2*np.pi)) * np.exp(-(np.log(x)-mu)**2/(2*sigma**2))
+
+#arguments = all but the integration variable
+def average(mean, std, f, *args):
+    def integrand(x):
+        return f(x,*args)*logNormalDistribution(x,mean, std)
+    result, _ = integrate.quad(integrand, 0, np.inf)
+    return result 
+
+#args = all but radius and wavelengths
+def averageVectorized(mean, std, yAxis, f, *args, numPoints = 1000):
+    xMin = 1e-6
+    xMax = mean + 7*std 
+    x = np.linspace(xMin, xMax, numPoints)
+
+    logNorm = logNormalDistribution(x, mean, std)
+    #Normalize just in case. Use trapz because this is a numerical integration
+    logNorm /= np.trapz(logNorm, x) 
+
+    #Create grid
+    yGrid = yAxis[:, None] #Reshape values as column vector
+    fValues = f(x, yGrid, )
+
 
 #------------------------------------------#
 #-----------------DRUDE--------------------#
@@ -207,84 +284,9 @@ def fullAbsCoeffCoreFit(Es, A, Ep, gammaBulk, r, Eg, gammaIB, Ef, T, nMedium):
     
 
 #------------------------------------------#
-#----------------UTILS---------------------#
+#------------PRODUCT SPECTRA---------------#
 #------------------------------------------#
-#given two sets of data, each one with its own x axis and y axis, this function interpolates to a third axis and returns a numpy array of complex numbers
-def convertToInterpolatedComplex(xReal,yReal, xImag,yImag, xInterpolated):
-    interpolatedComplex = np.empty(xInterpolated.shape, dtype=complex)
-    
-    realInterpolator = interpolate.interp1d(xReal,yReal,kind='cubic', fill_value='extrapolate')
-    interpolatedComplex.real = realInterpolator(xInterpolated)
-    
-    imagInterpolator = interpolate.interp1d(xImag,yImag,kind='cubic', fill_value='extrapolate')
-    interpolatedComplex.imag = imagInterpolator(xInterpolated)
-
-    return interpolatedComplex
-
-#Input: complex np.array
-#Ouput: complex np.array
-def refractionIndexToDielectricFunc(n):
-    #If n is a np array do nothing, otherwise make it a np.array so multiplication is element wise.
-    n = np.asarray(n)
-    diel = np.empty(n.real.shape, dtype=complex)
-    diel.real = n.real**2 - n.imag**2
-    diel.imag = 2*n.real*n.imag
-
-    return diel
-
-def logNormalDistribution(x,mean,std):
-    mu = np.log(mean**2 / np.sqrt(mean**2 + std**2))
-    sigma = np.sqrt(np.log(1 + (std**2/mean**2)))
-    return 1/(x*sigma*np.sqrt(2*np.pi)) * np.exp(-(np.log(x)-mu)**2/(2*sigma**2))
-
-#arguments = all but the integration variable
-def average(mean, std, f, *args):
-    def integrand(x):
-        return f(x,*args)*logNormalDistribution(x,mean, std)
-    result, _ = integrate.quad(integrand, 0, np.inf)
-    return result 
-
-#args = all but radius and wavelengths
-def averageVectorized(mean, std, yAxis, f, *args, numPoints = 1000):
-    xMin = 1e-6
-    xMax = mean + 7*std 
-    x = np.linspace(xMin, xMax, numPoints)
-
-    logNorm = logNormalDistribution(x, mean, std)
-    #Normalize just in case. Use trapz because this is a numerical integration
-    logNorm /= np.trapz(logNorm, x) 
-
-    #Create grid
-    yGrid = yAxis[:, None] #Reshape values as column vector
-    fValues = f(x, yGrid, )
-
-#Creates the generalized residuals to use in the least square fitting.
-def generalizedResiduals(function, xName, xData, yData, paramsFit, paramsFixed):
-# Combine parameters in a single dict
-    allParams = {**paramsFit, **paramsFixed}
-
-    # Get the parameter names from the function signature
-    paramNames = list(inspect.signature(function).parameters.keys())
-
-    # Identify the indices of the parameters to be fitted
-    fitIndices = [paramNames.index(key) for key in paramsFit]
-
-    def residualsFunc(fitValues):
-        # Update the values of parameters to be fitted with the new guesses
-        for i, idx in enumerate(fitIndices):
-            allParams[paramNames[idx]] = fitValues[i]
-
-        # Reorder the parameters to match the function's signature, inserting xData at the correct position
-        residuals = []
-        for xValue in xData:
-            orderedParams = []    
-            for key in paramNames:
-                if key == xName:
-                    orderedParams.append(xValue)  # Add xData (independent variable)
-                else:
-                    orderedParams.append(allParams[key])  # Add the fitted or fixed parameters
-            yModel = function(*orderedParams)
-            residuals.append(yModel - yData)
-
-    return residualsFunc
-
+#In order to sum the absorbance spectrum, they both need to have the same x Axis. We interpolate the DOD to the Abs axis (since the DOD has already been interpolated in data treatment several times).
+def funcProductSpectrum(xAxisDOD, yAxisDOD, A, xAxisAbs, yAxisAbs):
+    interpolatedDOD = funcInterpolate(xAxisDOD, yAxisDOD, xAxisAbs)
+    return interpolatedDOD + A*yAxisAbs
