@@ -23,15 +23,27 @@ def convertToInterpolatedComplex(xReal,yReal, xImag,yImag, xInterpolated):
 #Interpolates a data set to xInterpol
 #Interpolate doesn't work if the x axis is not ordered, if there are repeated values or if there are any nans.
 def funcInterpolate(xOriginal, yOriginal, xInterpol):
+    mask = ~np.isnan(yOriginal)
+    yOriginal = yOriginal[mask]
+    xOriginal = xOriginal[mask]
+    reversed = False
+
     if xOriginal[0]>=xOriginal[1]:
         xOriginal = xOriginal[::-1]
         yOriginal = yOriginal[::-1]
+        reversed = True
     
-    mask = ~np.isnan(yOriginal)
-    yOriginal = yOriginal[mask]
+    if xInterpol[0]>=xInterpol[1]:
+        xInterpol = xInterpol[::-1]
+
     interpolator = interpolate.interp1d(xOriginal, yOriginal, kind='cubic', fill_value='extrapolate')
     yInterpolated = interpolator(xInterpol)
-    return (yInterpolated)
+    
+    if reversed:
+        return yInterpolated[::-1]
+    else:
+        return yInterpolated
+
 
 
 #Input: complex np.array
