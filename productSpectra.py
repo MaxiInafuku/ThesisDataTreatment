@@ -73,9 +73,9 @@ DODInterpolated = np.delete(DODInterpolated, np.arange(lowCutIndex,highCutIndex+
 productSpetrum = DODInterpolated + A*UVvisConvoluted
 
 Figure, ax = plt.subplots()
-ax.plot(UVvisDataWavelength, -UVvisConvoluted*A, linestyle = '--', label = 'UV vis')
-ax.plot(UVvisDataWavelength, DODInterpolated, linestyle = '--', label = 'DOD')
-ax.plot(UVvisDataWavelength, productSpetrum, label = 'prod spectrum')
+ax.scatter(UVvisDataWavelength, -UVvisConvoluted*A, linestyle = '--', label = 'UV vis', s=1)
+ax.scatter(UVvisDataWavelength, DODInterpolated, linestyle = '--', label = 'DOD', s=1)
+ax.scatter(UVvisDataWavelength, productSpetrum, label = 'prod spectrum', s=1)
 ax.set_xlabel('Wavelength(nm)')
 ax.set_ylabel('DOD')
 ax.legend()

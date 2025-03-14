@@ -44,7 +44,23 @@ def funcInterpolate(xOriginal, yOriginal, xInterpol):
     else:
         return yInterpolated
 
+#Checks the order of the x axis. It returns x in an ascending order and also inverts the y axis (if required).
+def funcCheckAxisOrder(x,y):
+    if x[0] > x[1]:
+        return x[::-1], y[::-1]
+    elif x[0] < x[1]:
+        return x,y 
+    else:
+        print('First and second datapoints in x axis are equal. There maight be no order.')
+        return x,y
 
+#Removes data, used to remove the scattered light.
+def funcDataTrimmer(x,y,lowCut,highCut):
+    lowCutIndex = np.searchsorted(x, lowCut, side = 'left')
+    highCutIndex = np.searchsorted(x, highCut, side = 'right')
+    xTrimmed = np.delete(x, np.arange(lowCutIndex, highCutIndex+1))
+    yTrimmed = np.delete(y, np.arange(lowCutIndex, highCutIndex+1))
+    return xTrimmed, yTrimmed
 
 #Input: complex np.array
 #Ouput: complex np.array
